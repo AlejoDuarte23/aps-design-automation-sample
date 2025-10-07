@@ -420,3 +420,69 @@ def get_workitem_status(workitem_id: str, token: str) -> Dict[str, Any]:
     )
     r.raise_for_status()
     return r.json()
+
+
+def create_activity_json(
+    activity_id: str,
+    engine: str,
+    appbundle_full_alias: str,
+    description: str,
+    token: str,
+    input_local_name: str = "input.rvt",
+    result_local_name: str = "result.rvt",
+    json_param_name: str = "cubeParams",
+    json_local_name: str = "cube.json",
+) -> Dict[str, Any]:
+    """
+    Create a Revit Activity that runs an AppBundle and accepts a JSON parameter saved as json_local_name.
+    """
+    short_id = _short_appbundle_id(appbundle_full_alias)
+    command = (
+        f"$(engine.path)\\revitcoreconsole.exe "
+        f'/i "$(args[rvtFile].path)" '
+        f'/al "$(appbundles[{short_id}].path)"'
+    )
+
+    payload = {
+        "id": activity_id,
+        "commandLine": [command],
+        "parameters": {
+            "rvtFile": {
+                "zip": False,
+                "ondemand": False,
+                "verb": "get",
+                "description": "Input Revit model",
+                "required": True,
+                "localName": input_local_name,
+            },
+            json_param_name: {
+                "zip": False,
+                "ondemand": False,
+                "verb": "get",
+                "description": "Cube parameters JSON",
+                "required": False,
+                "localName": json_local_name,
+            },
+            "result": {
+                "zip": False,
+                "ondemand": False,
+                "verb": "put",
+                "description": "Results",
+                "required": True,
+                "localName": result_local_name,
+            },
+        },
+        "engine": engine,
+        "appbundles": [appbundle_full_alias],
+        "description": description,
+    }
+
+    url = f"{DA_BASE_URL}/activities"
+    r = requests.post(
+        url,
+        headers={**_auth_header(token), "Content-Type": "application/json"},
+        json=payload,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()

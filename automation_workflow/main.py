@@ -183,7 +183,7 @@ class DesignAutomationWorkflow:
             result_oss_urn=result_oss_urn,
             token=self.token
         )
-        
+        print(workitem_response)
         workitem_id = workitem_response.get('id')
         print(f"WorkItem submitted: {workitem_id}")
         
@@ -194,6 +194,7 @@ class DesignAutomationWorkflow:
         
         while elapsed_time < max_wait_time:
             status_response = get_workitem_status(workitem_id, self.token)
+            print(f"{status_response=}")
             status = status_response.get('status')
             
             print(f"  [{elapsed_time:3d}s] {status}")
@@ -224,6 +225,132 @@ class DesignAutomationWorkflow:
             "elapsed_time": elapsed_time,
             "report_url": status_response.get('reportUrl'),
             "stats": status_response.get('stats', {})
+        }
+        
+        if final_status == 'success':
+            print(f"SUCCESS - Completed in {elapsed_time}s")
+            
+            # Step 5: Download result
+            if download_result:
+                output_file_path = f"files/downloaded_{output_object_key}"
+                
+                try:
+                    download_oss_object(
+                        self.bucket_key, output_object_key, 
+                        output_file_path, self.token
+                    )
+                    file_size = os.path.getsize(output_file_path)
+                    print(f"Downloaded: {output_file_path} ({file_size:,} bytes)")
+                    result['downloaded_file_path'] = output_file_path
+                    result['downloaded_file_size'] = file_size
+                except Exception as e:
+                    print(f"Download failed: {e}")
+                    result['download_error'] = str(e)
+        
+        elif final_status == 'failed':
+            print(f"FAILED - Report: {status_response.get('reportUrl')}")
+        
+        print("\n" + "=" * 60)
+        
+        return result
+    
+    def run_workitem_with_json(
+        self,
+        input_file_path: str,
+        activity_id: str = "CreateCubeActivity",
+        alias: str = "test",
+        json_params: Dict[str, Any] = None,
+        json_param_name: str = "cubeParams",
+        max_wait_time: int = 300,
+        poll_interval: int = 10,
+        download_result: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Complete workflow: Upload input, run workitem with JSON parameters, monitor, and download result
+        
+        Args:
+            input_file_path: Local path to input Revit file
+            activity_id: Activity name to use
+            alias: Activity alias
+            json_params: Dictionary to send as JSON parameter
+            json_param_name: Name of the JSON parameter in the activity
+            max_wait_time: Maximum seconds to wait for completion
+            poll_interval: Seconds between status checks
+            download_result: Whether to download the result file
+            
+        Returns:
+            Dictionary with workitem results
+        """
+        print("\n" + "=" * 60)
+        print("DESIGN AUTOMATION WORKITEM EXECUTION (WITH JSON)")
+        print("=" * 60)
+        
+        # Get nickname
+        nickname = self.get_or_create_nickname()
+        activity_full_alias = f"{nickname}.{activity_id}+{alias}"
+        
+        print(f"Activity: {activity_full_alias}")
+        print(f"JSON Parameter: {json_param_name} = {json_params}")
+        
+        # Step 1: Upload input file
+        input_object_key, input_oss_urn = self.upload_input_file(input_file_path)
+        
+        # Step 2: Create output placeholder
+        output_object_key = f"result_{uuid.uuid4()}.rvt"
+        result_oss_urn = build_oss_urn(self.bucket_key, output_object_key)
+        
+        # Step 3: Create workitem with JSON parameters
+        workitem_response = create_workitem_for_revit(
+            activity_full_alias=activity_full_alias,
+            input_oss_urn=input_oss_urn,
+            result_oss_urn=result_oss_urn,
+            token=self.token,
+            embedded_json_param=json_param_name,
+            embedded_json_value=json_params or {}
+        )
+        print(workitem_response)
+        workitem_id = workitem_response.get('id')
+        print(f"WorkItem submitted: {workitem_id}")
+        
+        # Step 4: Monitor workitem
+        print("Monitoring status...")
+        elapsed_time = 0
+        status_response = None
+        
+        while elapsed_time < max_wait_time:
+            status_response = get_workitem_status(workitem_id, self.token)
+            print(f"{status_response=}")
+            status = status_response.get('status')
+            
+            print(f"  [{elapsed_time:3d}s] {status}")
+            
+            if status in ['success', 'failed', 'cancelled']:
+                break
+            
+            time.sleep(poll_interval)
+            elapsed_time += poll_interval
+        else:
+            print(f"Warning: Timeout after {max_wait_time}s")
+            return {
+                "status": "timeout",
+                "workitem_id": workitem_id,
+                "elapsed_time": elapsed_time
+            }
+        
+        # Display results
+        final_status = status_response.get('status')
+        result = {
+            "workitem_id": workitem_id,
+            "status": final_status,
+            "bucket_key": self.bucket_key,
+            "input_object_key": input_object_key,
+            "output_object_key": output_object_key,
+            "input_urn": input_oss_urn,
+            "output_urn": result_oss_urn,
+            "elapsed_time": elapsed_time,
+            "report_url": status_response.get('reportUrl'),
+            "stats": status_response.get('stats', {}),
+            "json_params": json_params
         }
         
         if final_status == 'success':
