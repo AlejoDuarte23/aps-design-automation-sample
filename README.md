@@ -16,3 +16,9 @@ Create a `.env` file in the project root:
 CLIENT_ID=your_client_id_here
 CLIENT_SECRET=your_client_secret_here
 ```
+## Download Files
+
+The following files need to be downloaded to run the example. Create a folder named `files` in the root of the repo:
+
+- [Delete all wall bundle](https://github.com/autodesk-platform-services/aps-tutorial-postman/blob/f8469f1bf0a5dd53e8e7193c0e5a1f1e0604c3d6/DA4Revit/walkthrough_data/DeleteWallsApp.zip)
+- [Revit file](https://github.com/autodesk-platform-services/aps-tutorial-postman/blob/f8469f1bf0a5dd53e8e7193c0e5a1f1e0604c3d6/DA4Revit/walkthrough_data/DeleteWalls.rvt)
