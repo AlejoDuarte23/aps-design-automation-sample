@@ -486,3 +486,66 @@ def create_activity_json(
     )
     r.raise_for_status()
     return r.json()
+
+
+def create_build_structure_activity(
+    activity_id: str,
+    engine: str,
+    appbundle_full_alias: str,
+    description: str,
+    token: str,
+    input_local_name: str = "input.rvt",
+    json_param_name: str = "structure",
+    json_local_name: str = "structure.json",
+    result_local_name: str = "result.rvt",
+) -> dict:
+    """
+    Create a Revit Activity that runs an AppBundle and accepts a structure JSON parameter.
+    This is specifically designed for the BuildStructureApp which expects structure.json
+    with connectivity nodes and lines/members definition.
+    """
+    short_id = _short_appbundle_id(appbundle_full_alias)
+    command = (
+        f"$(engine.path)\\revitcoreconsole.exe "
+        f'/i "$(args[rvtFile].path)" '
+        f'/al "$(appbundles[{short_id}].path)"'
+    )
+
+    payload = {
+        "id": activity_id,
+        "commandLine": [command],
+        "parameters": {
+            "rvtFile": {
+                "zip": False,
+                "ondemand": False,
+                "verb": "get",
+                "description": "Input Revit model",
+                "required": True,
+                "localName": input_local_name,
+            },
+            json_param_name: {
+                "zip": False,
+                "ondemand": False,
+                "verb": "get",
+                "description": "Structure parameters JSON",
+                "required": True,
+                "localName": json_local_name,
+            },
+            "result": {
+                "zip": False,
+                "ondemand": False,
+                "verb": "put",
+                "description": "Output Revit model",
+                "required": True,
+                "localName": result_local_name,
+            },
+        },
+        "engine": engine,
+        "appbundles": [appbundle_full_alias],
+        "description": description,
+    }
+
+    url = f"{DA_BASE_URL}/activities"
+    r = requests.post(url, headers={**_auth_header(token), "Content-Type": "application/json"}, json=payload, timeout=30)
+    r.raise_for_status()
+    return r.json()
